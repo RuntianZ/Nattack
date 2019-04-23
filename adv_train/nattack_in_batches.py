@@ -18,7 +18,7 @@ if __name__ == '__main__':
   parser.add_argument('--ckpt', type=str, help='Checkpoint path')
   parser.add_argument('--eps', default=8.0/255.0, type=float)
   parser.add_argument('--step_num', default=40, type=int, help='Number of attack trials')
-  parser.add_argument('--npop', default=16, type=int)
+  parser.add_argument('--npop', default=100, type=int)
   parser.add_argument('--batch_size', default=16, type=int)
   parser.add_argument('--sigma', default=0.1, type=float)
   args = parser.parse_args()
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     mask = np.ones((len(x_batch),), dtype=int)
     prediction = np.argmax(model.predict(x_batch), axis=1)
-    mask &= (prediction == y_train)
+    mask &= (prediction == y_batch)
 
     modify = np.random.randn(len(x_batch), 32, 32, 3) * 0.001
     x_old_batch = np.tile(x_batch, (args.npop, 1, 1, 1))
@@ -74,6 +74,6 @@ if __name__ == '__main__':
       prediction = np.argmax(model.predict(x_new_batch), axis=1)
 
       for i in range(args.npop):
-        mask &= (prediction[i * len(x_batch):(i + 1) * len(x_batch)] == y_train)
+        mask &= (prediction[i * len(x_batch):(i + 1) * len(x_batch)] == y_batch)
 
     print('Survival: {} of {}'.format(np.sum(mask), len(x_batch)))
