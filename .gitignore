@@ -12,5 +12,6 @@ data/
 .settings/
 .project
 *.zip
-
+.DS_Store
+.idea/
 
