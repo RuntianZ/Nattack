@@ -16,7 +16,7 @@ def torch_arctanh(x, eps=1e-6):
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='PGD Attack')
   parser.add_argument('--ckpt', type=str, help='Checkpoint path')
-  parser.add_argument('--eps', default=8.0, type=float)
+  parser.add_argument('--eps', default=8.0/255.0, type=float)
   parser.add_argument('--step_num', default=40, type=int, help='Number of attack trials')
   parser.add_argument('--npop', default=16, type=int)
   parser.add_argument('--batch_size', default=16, type=int)
@@ -59,6 +59,7 @@ if __name__ == '__main__':
     mask &= (prediction == y_train)
 
     modify = np.random.randn(len(x_batch), 32, 32, 3) * 0.001
+    x_old_batch = np.tile(x_batch, (args.npop, 1, 1, 1))
 
     for runstep in range(args.step_num):
       Nsample = np.random.randn(args.npop, 32, 32, 3)
@@ -66,7 +67,6 @@ if __name__ == '__main__':
       modify_try = modify.repeat(args.npop, 0) + args.sigma * Nsample_batch
 
       x_new_batch = np.tile(torch_arctanh((x_batch - boxplus) / boxmul), (args.npop, 1, 1, 1))
-      x_old_batch = np.tile(x_batch, (args.npop, 1, 1, 1))
       x_new_batch = np.tanh(x_new_batch + modify_try) * boxmul + boxplus
       x_new_batch = np.clip(x_new_batch, x_old_batch - args.eps, x_old_batch + args.eps)
       x_new_batch = np.clip(x_new_batch, 0.0, 1.0)
