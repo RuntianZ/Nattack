@@ -66,10 +66,10 @@ if __name__ == '__main__':
 
     for runstep in range(args.step_num):
       Nsample = np.random.randn(args.npop, 32, 32, 3)
-      Nsample_batch = np.tile(Nsample, (len(x_batch), 1, 1, 1))
-      modify_try = modify.repeat(args.npop, 0) + args.sigma * Nsample_batch
+      Nsample_batch = Nsample.repeat(len(x_batch), 0)
+      modify_try = np.tile(modify, (args.npop, 1, 1, 1)) + args.sigma * Nsample_batch
 
-      x_new_batch = np.tile(torch_arctanh((x_batch - boxplus) / boxmul), (args.npop, 1, 1, 1))
+      x_new_batch = torch_arctanh((x_old_batch - boxplus) / boxmul)
       x_new_batch = np.tanh(x_new_batch + modify_try) * boxmul + boxplus
       x_new_batch = np.clip(x_new_batch, x_old_batch - args.eps, x_old_batch + args.eps)
       x_new_batch = np.clip(x_new_batch, 0.0, 1.0)
@@ -82,7 +82,10 @@ if __name__ == '__main__':
       loss1 = np.clip(real - other, 0., 1000.)
       reward = -0.5 * loss1
       A = (reward - np.mean(reward)) / (np.std(reward) + 1e-7)
-      modify = modify + (args.alpha / (args.npop * args.sigma)) * ((np.dot(Nsample_batch.reshape(len(x_batch) * args.npop, -1).T, A)).reshape(32, 32, 3))
+
+      for j in range(len(x_batch)):
+        modify[j] += (args.alpha / (args.npop * args.sigma)) * \
+               ((np.dot(Nsample.reshape(args.npop, -1).T, A[j::len(x_batch)])).reshape(32, 32, 3))
 
       # Test
       if runstep % 10 == 9:
