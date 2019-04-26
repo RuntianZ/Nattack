@@ -15,12 +15,13 @@ def torch_arctanh(x, eps=1e-6):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='PGD Attack')
-  parser.add_argument('--ckpt', type=str, help='Checkpoint path')
+  parser.add_argument('--ckpt', default='cifar10_normal.h5', type=str, help='Checkpoint path')
   parser.add_argument('--eps', default=8.0/255.0, type=float)
-  parser.add_argument('--step_num', default=40, type=int, help='Number of attack trials')
+  parser.add_argument('--step_num', default=100, type=int, help='Number of attack trials')
   parser.add_argument('--npop', default=100, type=int)
   parser.add_argument('--batch_size', default=16, type=int)
   parser.add_argument('--sigma', default=0.1, type=float)
+  parser.add_argument('--alpha', default=0.008, type=float)
   args = parser.parse_args()
 
   boxmin = 0
@@ -60,6 +61,8 @@ if __name__ == '__main__':
 
     modify = np.random.randn(len(x_batch), 32, 32, 3) * 0.001
     x_old_batch = np.tile(x_batch, (args.npop, 1, 1, 1))
+    y_batch_tile = np.tile(y_batch, (args.npop,))
+    logits_batch_tile = keras.utils.to_categorical(y_batch_tile, num_classes)
 
     for runstep in range(args.step_num):
       Nsample = np.random.randn(args.npop, 32, 32, 3)
@@ -71,9 +74,29 @@ if __name__ == '__main__':
       x_new_batch = np.clip(x_new_batch, x_old_batch - args.eps, x_old_batch + args.eps)
       x_new_batch = np.clip(x_new_batch, 0.0, 1.0)
 
-      prediction = np.argmax(model.predict(x_new_batch), axis=1)
+      outputs = model.predict(x_new_batch)
+      prediction = np.argmax(outputs, axis=1)
 
-      for i in range(args.npop):
-        mask &= (prediction[i * len(x_batch):(i + 1) * len(x_batch)] == y_batch)
+      real = np.log((logits_batch_tile * outputs).sum(1) + 1e-30)
+      other = np.log(((1. - logits_batch_tile) * outputs - logits_batch_tile * 10000.).max(1)[0] + 1e-30)
+      loss1 = np.clip(real - other, 0., 1000.)
+      reward = -0.5 * loss1
+      A = (reward - np.mean(reward)) / (np.std(reward) + 1e-7)
+      modify = modify + (args.alpha / (args.npop * args.sigma)) * ((np.dot(Nsample_batch.reshape(len(x_batch) * args.npop, -1).T, A)).reshape(32, 32, 3))
+
+      # Test
+      if runstep % 10 == 9:
+        x_test_batch = torch_arctanh((x_batch - boxplus) / boxmul)
+        x_test_batch = np.tanh(x_test_batch + modify) * boxmul + boxplus
+        x_test_batch = np.clip(x_test_batch, x_batch - args.eps, x_batch + args.eps)
+        x_test_batch = np.clip(x_test_batch, 0.0, 1.0)
+        l2real = np.sum((x_test_batch - x_batch) ** 2) ** 0.5
+        print('l2real:', l2real)
+        prediction = np.argmax(model.predict(x_test_batch), axis=1)
+        mask &= (prediction == y_batch)
+        print(np.sum(mask))
+        if np.sum(mask) == 0:
+          break
+
 
     print('Survival: {} of {}'.format(np.sum(mask), len(x_batch)))
